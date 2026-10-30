@@ -29,13 +29,16 @@ def conflated_setattr(obj: Any, name: str, value: Any) -> None:
     """
     key = (id(obj), name)
     with _pending_lock:
-        queued = key in _pending
+        apply_queued = key in _pending
         _pending[key] = (obj, value)
-    if not queued:
+    # A queued _apply_pending carries only the key and reads _pending when it runs, so it
+    # picks up any value set while it waits; queueing another would apply that value twice.
+    if not apply_queued:
         deferred_call(_apply_pending, key)
 
 
 def _apply_pending(key: tuple[int, str]) -> None:
+    # Popping under the lock means a set arriving after this finds no key and queues afresh.
     with _pending_lock:
         obj, value = _pending.pop(key)
     setattr(obj, key[1], value)
